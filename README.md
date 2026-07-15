@@ -4,6 +4,8 @@ A Home Assistant custom integration that notifies you when it is cooler
 outside than inside and ventilating is worthwhile — room-aware, with window
 contact sensors, actionable notifications and English/German texts.
 
+[![Open your Home Assistant instance and add this repository to HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=C0d3Br3aker&repository=Ventilation-Reminder&category=integration)
+
 ## Features
 
 - **Open reminder**: When the warmest outdoor temperature is at least the
@@ -33,9 +35,13 @@ contact sensors, actionable notifications and English/German texts.
 
 ### HACS (recommended)
 
-1. In HACS, add `https://github.com/C0d3Br3aker/Ventilation-Reminder` as a
-   custom repository (category *Integration*) and install
+1. Click the badge below (or add
+   `https://github.com/C0d3Br3aker/Ventilation-Reminder` manually in HACS as
+   a custom repository, category *Integration*) and install
    **Ventilation Reminder**.
+
+   [![Open your Home Assistant instance and add this repository to HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=C0d3Br3aker&repository=Ventilation-Reminder&category=integration)
+
 2. Restart Home Assistant.
 
 ### Manual
@@ -51,6 +57,8 @@ Requires Home Assistant 2024.11 or newer.
 1. **Settings → Devices & Services → Add Integration → Ventilation
    Reminder**: configure outdoor sensors, notify services (e.g.
    `mobile_app_<your_phone>`), thresholds, quiet hours and language.
+
+   [![Open your Home Assistant instance and start setting up this integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ventilation_reminder)
 2. Open the integration's **Configure** dialog to **add rooms**: name,
    indoor temperature sensors and optional window contact sensors per room.
 
