@@ -30,6 +30,8 @@ class VentilationRecommendedSensor(
     """On while opening the windows of this room is recommended."""
 
     _attr_icon = "mdi:window-open-variant"
+    _attr_has_entity_name = True
+    _attr_translation_key = "ventilation_recommended"
 
     def __init__(self, coordinator: VentilationCoordinator, slug: str) -> None:
         super().__init__(coordinator)
@@ -38,11 +40,11 @@ class VentilationRecommendedSensor(
         self._attr_unique_id = (
             f"{coordinator.entry.entry_id}_{slug}_ventilation_recommended"
         )
-        self._attr_name = f"{room.name} ventilation recommended"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name="Ventilation Reminder",
+            identifiers={(DOMAIN, f"{coordinator.entry.entry_id}_{slug}")},
+            name=room.name,
             manufacturer="Ventilation Reminder",
+            via_device=(DOMAIN, coordinator.entry.entry_id),
         )
 
     @property
@@ -57,7 +59,12 @@ class VentilationRecommendedSensor(
             return {}
         return {
             "indoor_temperature": room.temp_in,
+            "indoor_humidity": room.humidity,
+            "indoor_dew_point": room.dew_point,
             "outdoor_temperature": self.coordinator.outdoor_temp,
+            "outdoor_humidity": self.coordinator.outdoor_humidity,
+            "outdoor_dew_point": self.coordinator.outdoor_dew_point,
+            "forecast_high": self.coordinator.forecast_high,
             "close_recommended": room.close_recommended,
             "open_windows": room.open_window_names,
         }

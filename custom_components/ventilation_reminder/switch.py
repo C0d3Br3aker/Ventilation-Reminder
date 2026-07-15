@@ -32,11 +32,12 @@ class SnoozeSwitch(
     """On = no more reminders today; resets automatically at midnight."""
 
     _attr_icon = "mdi:bell-sleep"
+    _attr_has_entity_name = True
+    _attr_translation_key = "snooze_today"
 
     def __init__(self, coordinator: VentilationCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.entry.entry_id}_snooze_today"
-        self._attr_name = "Ventilation Reminder Snooze today"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
             name="Ventilation Reminder",

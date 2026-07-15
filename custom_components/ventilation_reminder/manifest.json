@@ -1,13 +1,13 @@
 {
   "domain": "ventilation_reminder",
   "name": "Ventilation Reminder",
-  "codeowners": [],
+  "codeowners": ["@C0d3Br3aker"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["persistent_notification"],
   "documentation": "https://github.com/C0d3Br3aker/Ventilation-Reminder",
   "integration_type": "hub",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/C0d3Br3aker/Ventilation-Reminder/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

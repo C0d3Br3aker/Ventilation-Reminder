@@ -6,18 +6,27 @@
         "description": "Globale Einstellungen. Räume fügst du im nächsten Schritt hinzu.",
         "data": {
           "outdoor_sensors": "Außentemperatursensoren",
-          "notify_services": "Notify-Dienste (z. B. mobile_app_...)",
+          "outdoor_humidity_sensors": "Außenfeuchtesensoren (optional)",
+          "notify_services": "Erinnerungsdienste (z. B. mobile_app_...)",
           "min_diff": "Mindest-Temperaturdifferenz",
           "indoor_min_temp": "Innen-Mindesttemperatur",
+          "humidity_threshold": "Luftfeuchte-Schwellwert",
           "delay_minutes": "Verzögerung (Minuten)",
           "time_start": "Nicht stören vor",
           "time_end": "Nicht stören nach",
+          "weather_entity": "Wetter-Entität (optional)",
+          "hot_day_temp": "Hitzetag-Schwellwert",
           "language": "Sprache der Benachrichtigungen"
         },
         "data_description": {
+          "notify_services": "Bleibt das Feld leer, erscheinen Erinnerungen stattdessen als Home-Assistant-Benachrichtigung.",
           "min_diff": "Draußen muss es mindestens so viel kühler sein als im Raum, bevor erinnert wird.",
           "indoor_min_temp": "Erinnerung nur, wenn der Raum mindestens so warm ist (verhindert Dauer-Erinnerungen im Winter).",
-          "delay_minutes": "Die Bedingung muss so lange durchgehend erfüllt sein, bevor benachrichtigt wird."
+          "outdoor_humidity_sensors": "Wenn gesetzt, vergleichen Feuchte-Erinnerungen die Taupunkte, statt nur kühlere Außenluft zu verlangen.",
+          "humidity_threshold": "Räume mit Feuchtesensoren werden auch gemeldet, wenn die Luftfeuchte diesen Wert erreicht und die Luft draußen trockener ist.",
+          "delay_minutes": "Die Bedingung muss so lange durchgehend erfüllt sein, bevor benachrichtigt wird.",
+          "weather_entity": "Wenn gesetzt, weisen Erinnerungen auf einen erwarteten heißen Tag hin.",
+          "hot_day_temp": "Ab dieser vorhergesagten Höchsttemperatur gilt der Tag als heiß."
         }
       },
       "add_room": {
@@ -26,9 +35,11 @@
         "data": {
           "name": "Raumname",
           "indoor_sensors": "Innentemperatursensoren",
+          "humidity_sensors": "Feuchtesensoren (optional)",
           "window_sensors": "Fensterkontakte (optional)"
         },
         "data_description": {
+          "humidity_sensors": "Wenn gesetzt, wird der Raum auch gemeldet, wenn seine Luftfeuchte den globalen Schwellwert überschreitet und die Luft draußen trockener ist.",
           "window_sensors": "Wenn gesetzt, wird nur erinnert, solange alle Fenster geschlossen sind, und beim Wärmeanstieg draußen ans Schließen erinnert."
         }
       },
@@ -50,6 +61,7 @@
         "menu_options": {
           "settings": "Globale Einstellungen",
           "add_room": "Raum hinzufügen",
+          "edit_room": "Raum bearbeiten",
           "remove_room": "Raum entfernen"
         }
       },
@@ -57,13 +69,24 @@
         "title": "Globale Einstellungen",
         "data": {
           "outdoor_sensors": "Außentemperatursensoren",
-          "notify_services": "Notify-Dienste (z. B. mobile_app_...)",
+          "outdoor_humidity_sensors": "Außenfeuchtesensoren (optional)",
+          "notify_services": "Erinnerungsdienste (z. B. mobile_app_...)",
           "min_diff": "Mindest-Temperaturdifferenz",
           "indoor_min_temp": "Innen-Mindesttemperatur",
+          "humidity_threshold": "Luftfeuchte-Schwellwert",
           "delay_minutes": "Verzögerung (Minuten)",
           "time_start": "Nicht stören vor",
           "time_end": "Nicht stören nach",
+          "weather_entity": "Wetter-Entität (optional)",
+          "hot_day_temp": "Hitzetag-Schwellwert",
           "language": "Sprache der Benachrichtigungen"
+        },
+        "data_description": {
+          "notify_services": "Bleibt das Feld leer, erscheinen Erinnerungen stattdessen als Home-Assistant-Benachrichtigung.",
+          "outdoor_humidity_sensors": "Wenn gesetzt, vergleichen Feuchte-Erinnerungen die Taupunkte, statt nur kühlere Außenluft zu verlangen.",
+          "humidity_threshold": "Räume mit Feuchtesensoren werden auch gemeldet, wenn die Luftfeuchte diesen Wert erreicht und die Luft draußen trockener ist.",
+          "weather_entity": "Wenn gesetzt, weisen Erinnerungen auf einen erwarteten heißen Tag hin.",
+          "hot_day_temp": "Ab dieser vorhergesagten Höchsttemperatur gilt der Tag als heiß."
         }
       },
       "add_room": {
@@ -71,9 +94,30 @@
         "data": {
           "name": "Raumname",
           "indoor_sensors": "Innentemperatursensoren",
+          "humidity_sensors": "Feuchtesensoren (optional)",
           "window_sensors": "Fensterkontakte (optional)"
         },
         "data_description": {
+          "humidity_sensors": "Wenn gesetzt, wird der Raum auch gemeldet, wenn seine Luftfeuchte den globalen Schwellwert überschreitet und die Luft draußen trockener ist.",
+          "window_sensors": "Wenn gesetzt, wird nur erinnert, solange alle Fenster geschlossen sind, und beim Wärmeanstieg draußen ans Schließen erinnert."
+        }
+      },
+      "edit_room": {
+        "title": "Raum bearbeiten",
+        "data": {
+          "room": "Raum"
+        }
+      },
+      "edit_room_details": {
+        "title": "Raum bearbeiten",
+        "data": {
+          "name": "Raumname",
+          "indoor_sensors": "Innentemperatursensoren",
+          "humidity_sensors": "Feuchtesensoren (optional)",
+          "window_sensors": "Fensterkontakte (optional)"
+        },
+        "data_description": {
+          "humidity_sensors": "Wenn gesetzt, wird der Raum auch gemeldet, wenn seine Luftfeuchte den globalen Schwellwert überschreitet und die Luft draußen trockener ist.",
           "window_sensors": "Wenn gesetzt, wird nur erinnert, solange alle Fenster geschlossen sind, und beim Wärmeanstieg draußen ans Schließen erinnert."
         }
       },
@@ -89,6 +133,18 @@
     },
     "abort": {
       "no_rooms": "Es sind noch keine Räume konfiguriert."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "ventilation_recommended": {
+        "name": "Lüften empfohlen"
+      }
+    },
+    "switch": {
+      "snooze_today": {
+        "name": "Heute pausieren"
+      }
     }
   },
   "selector": {
