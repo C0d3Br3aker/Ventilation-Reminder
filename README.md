@@ -54,8 +54,11 @@ Requires Home Assistant 2024.11 or newer.
 1. **Settings → Devices & Services → Add Integration → Ventilation
    Reminder**: configure outdoor sensors, notify services (e.g.
    `mobile_app_<your_phone>`), thresholds, quiet hours and language.
-2. Open the integration's **Configure** dialog to **add rooms**: name,
-   indoor temperature sensors and optional window contact sensors per room.
+2. The setup then asks you to **add rooms** right away: name, indoor
+   temperature sensors and optional window contact sensors per room. Add as
+   many rooms as you like before finishing.
+3. Rooms can be added or removed later at any time via the integration's
+   **Configure** dialog.
 
 | Setting | Description | Default |
 | --- | --- | --- |

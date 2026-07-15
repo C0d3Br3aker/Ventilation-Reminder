@@ -137,20 +137,52 @@ def _room_schema() -> vol.Schema:
 
 
 class VentilationReminderConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Initial setup: global settings; rooms are added via the options flow."""
+    """Initial setup: global settings followed by adding one or more rooms."""
 
     VERSION = 1
+
+    def __init__(self) -> None:
+        self._global: dict[str, Any] = {}
+        self._rooms: list[dict[str, Any]] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(
-                title="Ventilation Reminder",
-                data={CONF_ROOMS: [], **user_input},
-            )
+            self._global = user_input
+            return await self.async_step_add_room()
         return self.async_show_form(
             step_id="user", data_schema=_global_schema(self.hass, {})
+        )
+
+    async def async_step_add_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            new_slug = slugify(user_input[CONF_ROOM_NAME])
+            if any(slugify(room[CONF_ROOM_NAME]) == new_slug for room in self._rooms):
+                errors["base"] = "room_exists"
+            else:
+                self._rooms.append(user_input)
+                return await self.async_step_room_menu()
+        return self.async_show_form(
+            step_id="add_room", data_schema=_room_schema(), errors=errors
+        )
+
+    async def async_step_room_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_show_menu(
+            step_id="room_menu", menu_options=["add_room", "finish"]
+        )
+
+    async def async_step_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_create_entry(
+            title="Ventilation Reminder",
+            data={CONF_ROOMS: self._rooms, **self._global},
         )
 
     @staticmethod

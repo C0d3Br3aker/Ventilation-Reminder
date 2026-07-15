@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Ventilation Reminder",
-        "description": "Global settings. After setup, add rooms via the integration's Configure button.",
+        "description": "Global settings. Rooms are added in the next step.",
         "data": {
           "outdoor_sensors": "Outdoor temperature sensors",
           "notify_services": "Notify services (e.g. mobile_app_...)",
@@ -19,7 +19,29 @@
           "indoor_min_temp": "Only remind if the room is at least this warm (prevents constant reminders in winter).",
           "delay_minutes": "The condition must hold continuously for this long before notifying."
         }
+      },
+      "add_room": {
+        "title": "Add room",
+        "description": "Add your first room. You can add more rooms in the next step or later via the integration's Configure button.",
+        "data": {
+          "name": "Room name",
+          "indoor_sensors": "Indoor temperature sensors",
+          "window_sensors": "Window sensors (optional)"
+        },
+        "data_description": {
+          "window_sensors": "If set, you are only reminded while all windows are closed, and reminded to close them once it warms up outside."
+        }
+      },
+      "room_menu": {
+        "title": "Room added",
+        "menu_options": {
+          "add_room": "Add another room",
+          "finish": "Finish setup"
+        }
       }
+    },
+    "error": {
+      "room_exists": "A room with this name already exists."
     }
   },
   "options": {
