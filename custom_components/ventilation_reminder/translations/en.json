@@ -1,0 +1,81 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ventilation Reminder",
+        "description": "Global settings. After setup, add rooms via the integration's Configure button.",
+        "data": {
+          "outdoor_sensors": "Outdoor temperature sensors",
+          "notify_services": "Notify services (e.g. mobile_app_...)",
+          "min_diff": "Minimum temperature difference",
+          "indoor_min_temp": "Indoor threshold temperature",
+          "delay_minutes": "Delay (minutes)",
+          "time_start": "Do not disturb before",
+          "time_end": "Do not disturb after",
+          "language": "Notification language"
+        },
+        "data_description": {
+          "min_diff": "Outside must be at least this much cooler than the room before a reminder is sent.",
+          "indoor_min_temp": "Only remind if the room is at least this warm (prevents constant reminders in winter).",
+          "delay_minutes": "The condition must hold continuously for this long before notifying."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "settings": "Global settings",
+          "add_room": "Add room",
+          "remove_room": "Remove room"
+        }
+      },
+      "settings": {
+        "title": "Global settings",
+        "data": {
+          "outdoor_sensors": "Outdoor temperature sensors",
+          "notify_services": "Notify services (e.g. mobile_app_...)",
+          "min_diff": "Minimum temperature difference",
+          "indoor_min_temp": "Indoor threshold temperature",
+          "delay_minutes": "Delay (minutes)",
+          "time_start": "Do not disturb before",
+          "time_end": "Do not disturb after",
+          "language": "Notification language"
+        }
+      },
+      "add_room": {
+        "title": "Add room",
+        "data": {
+          "name": "Room name",
+          "indoor_sensors": "Indoor temperature sensors",
+          "window_sensors": "Window sensors (optional)"
+        },
+        "data_description": {
+          "window_sensors": "If set, you are only reminded while all windows are closed, and reminded to close them once it warms up outside."
+        }
+      },
+      "remove_room": {
+        "title": "Remove room",
+        "data": {
+          "rooms": "Rooms to remove"
+        }
+      }
+    },
+    "error": {
+      "room_exists": "A room with this name already exists."
+    },
+    "abort": {
+      "no_rooms": "No rooms are configured yet."
+    }
+  },
+  "selector": {
+    "language": {
+      "options": {
+        "auto": "Automatic (follow Home Assistant language)",
+        "en": "English",
+        "de": "German"
+      }
+    }
+  }
+}

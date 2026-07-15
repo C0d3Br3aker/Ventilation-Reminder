@@ -1,0 +1,81 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ventilation Reminder",
+        "description": "Globale Einstellungen. Räume fügst du nach der Einrichtung über den Konfigurieren-Button der Integration hinzu.",
+        "data": {
+          "outdoor_sensors": "Außentemperatursensoren",
+          "notify_services": "Notify-Dienste (z. B. mobile_app_...)",
+          "min_diff": "Mindest-Temperaturdifferenz",
+          "indoor_min_temp": "Innen-Mindesttemperatur",
+          "delay_minutes": "Verzögerung (Minuten)",
+          "time_start": "Nicht stören vor",
+          "time_end": "Nicht stören nach",
+          "language": "Sprache der Benachrichtigungen"
+        },
+        "data_description": {
+          "min_diff": "Draußen muss es mindestens so viel kühler sein als im Raum, bevor erinnert wird.",
+          "indoor_min_temp": "Erinnerung nur, wenn der Raum mindestens so warm ist (verhindert Dauer-Erinnerungen im Winter).",
+          "delay_minutes": "Die Bedingung muss so lange durchgehend erfüllt sein, bevor benachrichtigt wird."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "settings": "Globale Einstellungen",
+          "add_room": "Raum hinzufügen",
+          "remove_room": "Raum entfernen"
+        }
+      },
+      "settings": {
+        "title": "Globale Einstellungen",
+        "data": {
+          "outdoor_sensors": "Außentemperatursensoren",
+          "notify_services": "Notify-Dienste (z. B. mobile_app_...)",
+          "min_diff": "Mindest-Temperaturdifferenz",
+          "indoor_min_temp": "Innen-Mindesttemperatur",
+          "delay_minutes": "Verzögerung (Minuten)",
+          "time_start": "Nicht stören vor",
+          "time_end": "Nicht stören nach",
+          "language": "Sprache der Benachrichtigungen"
+        }
+      },
+      "add_room": {
+        "title": "Raum hinzufügen",
+        "data": {
+          "name": "Raumname",
+          "indoor_sensors": "Innentemperatursensoren",
+          "window_sensors": "Fensterkontakte (optional)"
+        },
+        "data_description": {
+          "window_sensors": "Wenn gesetzt, wird nur erinnert, solange alle Fenster geschlossen sind, und beim Wärmeanstieg draußen ans Schließen erinnert."
+        }
+      },
+      "remove_room": {
+        "title": "Raum entfernen",
+        "data": {
+          "rooms": "Zu entfernende Räume"
+        }
+      }
+    },
+    "error": {
+      "room_exists": "Ein Raum mit diesem Namen existiert bereits."
+    },
+    "abort": {
+      "no_rooms": "Es sind noch keine Räume konfiguriert."
+    }
+  },
+  "selector": {
+    "language": {
+      "options": {
+        "auto": "Automatisch (Home-Assistant-Sprache)",
+        "en": "Englisch",
+        "de": "Deutsch"
+      }
+    }
+  }
+}
