@@ -98,3 +98,7 @@ python3.13 -m venv .venv
 
 CI runs [hassfest](https://developers.home-assistant.io/blog/2020/04/16/hassfest),
 HACS validation and the test suite on every push.
+
+## License
+
+Released under the [MIT License](LICENSE).
