@@ -1,32 +1,37 @@
 name: Release
 
-# HACS reads the releases API, not tags: without a release it falls back to
-# the default branch and treats every commit on main as a new version.
+# Publishing a release in the GitHub UI is the only manual step. The version
+# in manifest.json is written from the tag here, so the file in the repository
+# is a placeholder and never has to be bumped by hand.
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: Create release
+    name: Attach the HACS archive
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
-      - name: Verify manifest version matches the tag
+      - name: Write the tag into the manifest
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          manifest=$(jq -r .version custom_components/ventilation_reminder/manifest.json)
-          if [ "$tag" != "$manifest" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match manifest version $manifest" >&2
-            exit 1
-          fi
+          version="${GITHUB_REF_NAME#v}"
+          manifest=custom_components/ventilation_reminder/manifest.json
+          sed -E -i "s/(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")/\1$version\2/" "$manifest"
+          jq -e --arg v "$version" '.version == $v' "$manifest" >/dev/null ||
+            { echo "failed to write version $version into $manifest" >&2; exit 1; }
 
-      - name: Create release
+      - name: Build the archive
+        # HACS expects the integration's contents at the root of the zip
+        run: |
+          cd custom_components/ventilation_reminder
+          zip -r ../../ventilation_reminder.zip . -x '__pycache__/*' '*.pyc'
+
+      - name: Attach it to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release upload "$GITHUB_REF_NAME" ventilation_reminder.zip --clobber
