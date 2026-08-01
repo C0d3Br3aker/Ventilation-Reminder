@@ -8,7 +8,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.core import CoreState, HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from custom_components.ventilation_reminder.const import (
@@ -16,6 +16,7 @@ from custom_components.ventilation_reminder.const import (
     CONF_HOT_DAY_TEMP,
     CONF_HUMIDITY_SENSORS,
     CONF_INDOOR_SENSORS,
+    CONF_NOTIFY_SERVICES,
     CONF_OUTDOOR_HUMIDITY_SENSORS,
     CONF_OUTDOOR_SENSORS,
     CONF_ROOM_NAME,
@@ -23,6 +24,9 @@ from custom_components.ventilation_reminder.const import (
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DOMAIN,
+)
+from custom_components.ventilation_reminder.coordinator import (
+    VentilationCoordinator,
 )
 
 CONFIG = {
@@ -219,3 +223,137 @@ async def test_dew_point_comparison_with_outdoor_humidity(
     assert state.state == "on"
     assert abs(state.attributes["indoor_dew_point"] - 15.76) < 0.1
     assert abs(state.attributes["outdoor_dew_point"] - 7.41) < 0.1
+
+
+def _stored(entry: MockConfigEntry, data: dict) -> dict:
+    return {
+        "version": 1,
+        "minor_version": 1,
+        "key": f"{DOMAIN}.{entry.entry_id}",
+        "data": data,
+    }
+
+
+async def test_restart_clears_persistent_notification_state(
+    hass: HomeAssistant, hass_storage: dict
+) -> None:
+    """A restart wipes persistent notifications, so _notified_* must reset."""
+    entry = MockConfigEntry(domain=DOMAIN, data=CONFIG, title="Ventilation Reminder")
+    entry.add_to_hass(hass)
+    hass_storage[f"{DOMAIN}.{entry.entry_id}"] = _stored(
+        entry, {"notified_open": ["living_room"], "acked_open": ["living_room"]}
+    )
+
+    hass.set_state(CoreState.starting)
+    coordinator = VentilationCoordinator(hass, entry)
+    await coordinator._async_restore_state()
+
+    # No notify services configured -> the notification did not survive
+    assert coordinator._notified_open == set()
+    # Acks are unrelated to the notification and must be kept
+    assert coordinator._acked_open == {"living_room"}
+
+
+async def test_restart_keeps_notification_state_for_mobile_app(
+    hass: HomeAssistant, hass_storage: dict
+) -> None:
+    """Mobile app notifications survive a restart, so the tag must not resend."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**CONFIG, CONF_NOTIFY_SERVICES: ["mobile_app_phone"]},
+        title="Ventilation Reminder",
+    )
+    entry.add_to_hass(hass)
+    hass_storage[f"{DOMAIN}.{entry.entry_id}"] = _stored(
+        entry, {"notified_open": ["living_room"]}
+    )
+
+    hass.set_state(CoreState.starting)
+    coordinator = VentilationCoordinator(hass, entry)
+    await coordinator._async_restore_state()
+
+    assert coordinator._notified_open == {"living_room"}
+
+
+async def test_reload_keeps_persistent_notification_state(
+    hass: HomeAssistant, hass_storage: dict
+) -> None:
+    """A reload while running leaves persistent notifications in place."""
+    entry = MockConfigEntry(domain=DOMAIN, data=CONFIG, title="Ventilation Reminder")
+    entry.add_to_hass(hass)
+    hass_storage[f"{DOMAIN}.{entry.entry_id}"] = _stored(
+        entry, {"notified_open": ["living_room"]}
+    )
+
+    hass.set_state(CoreState.running)
+    coordinator = VentilationCoordinator(hass, entry)
+    await coordinator._async_restore_state()
+
+    assert coordinator._notified_open == {"living_room"}
+
+
+async def test_restart_restarts_the_delay_timers(
+    hass: HomeAssistant, hass_storage: dict, freezer: FrozenDateTimeFactory
+) -> None:
+    """Across a restart the condition cannot be shown to have held."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    entry = MockConfigEntry(domain=DOMAIN, data=CONFIG, title="Ventilation Reminder")
+    entry.add_to_hass(hass)
+    hass_storage[f"{DOMAIN}.{entry.entry_id}"] = _stored(
+        entry, {"open_since": {"living_room": "2026-07-15T14:00:00+00:00"}}
+    )
+
+    hass.set_state(CoreState.starting)
+    coordinator = VentilationCoordinator(hass, entry)
+    await coordinator._async_restore_state()
+
+    # A three hour old timestamp would clear any delay on the first cycle
+    assert coordinator._open_since == {}
+
+
+async def test_reload_keeps_the_delay_timers(
+    hass: HomeAssistant, hass_storage: dict, freezer: FrozenDateTimeFactory
+) -> None:
+    """A reload does not interrupt evaluation, so timers keep running."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    entry = MockConfigEntry(domain=DOMAIN, data=CONFIG, title="Ventilation Reminder")
+    entry.add_to_hass(hass)
+    hass_storage[f"{DOMAIN}.{entry.entry_id}"] = _stored(
+        entry, {"open_since": {"living_room": "2026-07-15T16:59:30+00:00"}}
+    )
+
+    hass.set_state(CoreState.running)
+    coordinator = VentilationCoordinator(hass, entry)
+    await coordinator._async_restore_state()
+
+    assert set(coordinator._open_since) == {"living_room"}
+
+
+async def test_unchanged_state_is_not_rewritten(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Idle update cycles must not schedule a storage write."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    hass.states.async_set("sensor.outdoor_temperature", "18.0")
+    hass.states.async_set("sensor.living_temperature", "21.0")
+    hass.states.async_set("sensor.living_humidity", "45.0")
+
+    entry = await _setup_entry(hass, CONFIG)
+    coordinator = entry.runtime_data
+
+    writes = 0
+    original = coordinator._store.async_delay_save
+
+    def _counting_delay_save(*args, **kwargs):
+        nonlocal writes
+        writes += 1
+        return original(*args, **kwargs)
+
+    coordinator._store.async_delay_save = _counting_delay_save
+
+    for _ in range(3):
+        freezer.tick(timedelta(minutes=2))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+    assert writes == 0

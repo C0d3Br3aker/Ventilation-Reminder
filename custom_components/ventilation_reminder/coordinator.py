@@ -10,7 +10,7 @@ from typing import Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -75,6 +75,24 @@ def _fmt(value: float | None) -> str:
     return f"{value:.1f}" if value is not None else "?"
 
 
+class VentilationStore(Store[dict[str, Any]]):
+    """Store for the coordinator state.
+
+    Store's default _async_migrate_func raises NotImplementedError, which would
+    escape async_setup_entry and break every existing install the moment
+    STORAGE_VERSION is bumped. Any future schema change must be handled here.
+    """
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,
+        old_minor_version: int,
+        old_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Migrate stored state to the current schema."""
+        return old_data
+
+
 def _dew_point(temp: float | None, rel_humidity: float | None) -> float | None:
     """Dew point in °C via the Magnus formula (valid for -45…60 °C)."""
     if temp is None or rel_humidity is None or rel_humidity <= 0:
@@ -114,9 +132,10 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
         self._notified_close: set[str] = set()
         self._snoozed_on: date | None = None
 
-        self._store: Store[dict[str, Any]] = Store(
+        self._store = VentilationStore(
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
         )
+        self._saved_state: dict[str, Any] | None = None
 
         suffix = entry.entry_id[:8]
         self.done_action = f"ventilation_done_{suffix}"
@@ -180,11 +199,19 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
         }
 
     def _schedule_save(self) -> None:
-        self._store.async_delay_save(self._state_to_save, STORE_SAVE_DELAY)
+        # Called on every update cycle, so skip writes that would change
+        # nothing - otherwise .storage is rewritten once a minute forever.
+        state = self._state_to_save()
+        if state == self._saved_state:
+            return
+        self._saved_state = state
+        self._store.async_delay_save(lambda: state, STORE_SAVE_DELAY)
 
     async def async_save_state(self) -> None:
         """Flush the persisted state immediately (called on unload)."""
-        await self._store.async_save(self._state_to_save())
+        state = self._state_to_save()
+        self._saved_state = state
+        await self._store.async_save(state)
 
     async def _async_restore_state(self) -> None:
         stored = await self._store.async_load()
@@ -206,6 +233,27 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
         self._notified_close = set(stored.get("notified_close", []))
         if snoozed_on := stored.get("snoozed_on"):
             self._snoozed_on = dt_util.parse_date(snoozed_on)
+
+        # A reload keeps Home Assistant running; a restart leaves a gap of
+        # unknown length in which nothing was evaluated.
+        restarted = self.hass.state is not CoreState.running
+
+        # Persistent notifications live in memory only, so a restart wipes them
+        # while _notified_* still claims the user was told. Without this the
+        # reminder never reappears until the affected rooms change.
+        if restarted and not self.config.get(CONF_NOTIFY_SERVICES):
+            self._notified_open = set()
+            self._notified_close = set()
+
+        # open/close_since assert the condition held *continuously*. Across the
+        # restart gap that cannot be vouched for, so the delay starts over -
+        # restoring the old timestamps would fire the reminder immediately.
+        if restarted:
+            self._open_since = {}
+            self._close_since = {}
+
+        # Seed the dirty check so an unchanged state does not trigger a write.
+        self._saved_state = self._state_to_save()
 
     # --- Snooze -----------------------------------------------------------
 
