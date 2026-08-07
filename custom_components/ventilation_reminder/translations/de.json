@@ -155,5 +155,11 @@
         "de": "Deutsch"
       }
     }
+  },
+  "issues": {
+    "missing_entities": {
+      "title": "Konfigurierte Entitäten fehlen",
+      "description": "Ventilation Reminder ({entry}) verwendet Entitäten, die es nicht mehr gibt: {entities}.\n\nVermutlich wurden sie umbenannt oder ihre Integration wurde entfernt. Räume, die auf ihnen beruhen, werden nicht mehr ausgewertet. Wähle im Konfigurationsdialog der Integration die aktuellen Entitäten aus oder entferne sie aus der Konfiguration."
+    }
   }
 }

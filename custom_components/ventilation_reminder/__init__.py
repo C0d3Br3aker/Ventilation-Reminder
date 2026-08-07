@@ -5,12 +5,16 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 from homeassistant.helpers.storage import Store
 from homeassistant.util import slugify
 
 from .const import CONF_ROOM_NAME, CONF_ROOMS, DOMAIN, STORAGE_VERSION
-from .coordinator import VentilationCoordinator
+from .coordinator import MISSING_ENTITIES_ISSUE, VentilationCoordinator
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.SWITCH]
 
@@ -89,4 +93,5 @@ async def async_unload_entry(
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete the persisted state when the entry is removed for good."""
+    ir.async_delete_issue(hass, DOMAIN, f"{MISSING_ENTITIES_ISSUE}_{entry.entry_id}")
     await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()

@@ -48,6 +48,17 @@ class VentilationRecommendedSensor(
         )
 
     @property
+    def available(self) -> bool:
+        """Unavailable while the readings this room is judged by are missing."""
+        room = self.coordinator.data.get(self._slug)
+        return (
+            super().available
+            and room is not None
+            and room.temp_in is not None
+            and self.coordinator.outdoor_temp is not None
+        )
+
+    @property
     def is_on(self) -> bool:
         room = self.coordinator.data.get(self._slug)
         return bool(room and room.open_recommended)
@@ -57,14 +68,17 @@ class VentilationRecommendedSensor(
         room = self.coordinator.data.get(self._slug)
         if room is None:
             return {}
+        # Temperatures are kept in °C internally and shown in the system unit.
+        to_display = self.coordinator.to_display
         return {
-            "indoor_temperature": room.temp_in,
+            "indoor_temperature": to_display(room.temp_in),
             "indoor_humidity": room.humidity,
-            "indoor_dew_point": room.dew_point,
-            "outdoor_temperature": self.coordinator.outdoor_temp,
+            "indoor_dew_point": to_display(room.dew_point),
+            "outdoor_temperature": to_display(self.coordinator.outdoor_temp),
             "outdoor_humidity": self.coordinator.outdoor_humidity,
-            "outdoor_dew_point": self.coordinator.outdoor_dew_point,
-            "forecast_high": self.coordinator.forecast_high,
+            "outdoor_dew_point": to_display(self.coordinator.outdoor_dew_point),
+            "forecast_high": to_display(self.coordinator.forecast_high),
             "close_recommended": room.close_recommended,
             "open_windows": room.open_window_names,
+            "unavailable_windows": room.unknown_window_names,
         }

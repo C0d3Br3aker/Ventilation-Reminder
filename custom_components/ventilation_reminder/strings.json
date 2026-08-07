@@ -155,5 +155,11 @@
         "de": "German"
       }
     }
+  },
+  "issues": {
+    "missing_entities": {
+      "title": "Configured entities are missing",
+      "description": "Ventilation Reminder ({entry}) is configured to use entities that no longer exist: {entities}.\n\nThey were probably renamed or their integration was removed. Rooms relying on them are no longer evaluated. Pick the current entities in the integration's Configure dialog, or remove them from the configuration."
+    }
   }
 }

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -15,6 +13,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 from homeassistant.util import slugify
+import voluptuous as vol
 
 from .const import (
     CONF_DELAY_MINUTES,
@@ -46,13 +45,26 @@ from .const import (
     LANG_DE,
     LANG_EN,
 )
+from .unit import delta_from_celsius, from_celsius
 
 CONF_ROOM = "room"
 
 
+def _temp(hass: HomeAssistant, celsius: float) -> float:
+    """Convert a °C bound or default to the unit the user sees."""
+    return round(from_celsius(celsius, hass.config.units.temperature_unit), 1)
+
+
+def _delta(hass: HomeAssistant, celsius: float) -> float:
+    """Convert a °C difference to the unit the user sees."""
+    return round(delta_from_celsius(celsius, hass.config.units.temperature_unit), 1)
+
+
 def _global_schema(hass: HomeAssistant, defaults: dict[str, Any]) -> vol.Schema:
-    """Schema for the global settings, shared by setup and options flow."""
+    """Build the global settings schema, shared by setup and options flow."""
     notify_services = sorted(hass.services.async_services().get("notify", {}))
+    # All temperature settings are entered - and stored - in the system unit.
+    temp_unit = hass.config.units.temperature_unit
     return vol.Schema(
         {
             vol.Required(
@@ -80,25 +92,28 @@ def _global_schema(hass: HomeAssistant, defaults: dict[str, Any]) -> vol.Schema:
                 )
             ),
             vol.Required(
-                CONF_MIN_DIFF, default=defaults.get(CONF_MIN_DIFF, DEFAULT_MIN_DIFF)
+                CONF_MIN_DIFF,
+                default=defaults.get(CONF_MIN_DIFF, _delta(hass, DEFAULT_MIN_DIFF)),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0,
-                    max=5,
+                    max=_delta(hass, 5),
                     step=0.5,
-                    unit_of_measurement="°C",
+                    unit_of_measurement=temp_unit,
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
             vol.Required(
                 CONF_INDOOR_MIN_TEMP,
-                default=defaults.get(CONF_INDOOR_MIN_TEMP, DEFAULT_INDOOR_MIN_TEMP),
+                default=defaults.get(
+                    CONF_INDOOR_MIN_TEMP, _temp(hass, DEFAULT_INDOOR_MIN_TEMP)
+                ),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=15,
-                    max=30,
+                    min=_temp(hass, 15),
+                    max=_temp(hass, 30),
                     step=0.5,
-                    unit_of_measurement="°C",
+                    unit_of_measurement=temp_unit,
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
@@ -129,7 +144,8 @@ def _global_schema(hass: HomeAssistant, defaults: dict[str, Any]) -> vol.Schema:
                 )
             ),
             vol.Required(
-                CONF_TIME_START, default=defaults.get(CONF_TIME_START, DEFAULT_TIME_START)
+                CONF_TIME_START,
+                default=defaults.get(CONF_TIME_START, DEFAULT_TIME_START),
             ): selector.TimeSelector(),
             vol.Required(
                 CONF_TIME_END, default=defaults.get(CONF_TIME_END, DEFAULT_TIME_END)
@@ -137,18 +153,18 @@ def _global_schema(hass: HomeAssistant, defaults: dict[str, Any]) -> vol.Schema:
             vol.Optional(
                 CONF_WEATHER_ENTITY,
                 description={"suggested_value": defaults.get(CONF_WEATHER_ENTITY)},
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="weather")
-            ),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
             vol.Required(
                 CONF_HOT_DAY_TEMP,
-                default=defaults.get(CONF_HOT_DAY_TEMP, DEFAULT_HOT_DAY_TEMP),
+                default=defaults.get(
+                    CONF_HOT_DAY_TEMP, _temp(hass, DEFAULT_HOT_DAY_TEMP)
+                ),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=20,
-                    max=40,
+                    min=_temp(hass, 20),
+                    max=_temp(hass, 40),
                     step=0.5,
-                    unit_of_measurement="°C",
+                    unit_of_measurement=temp_unit,
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
@@ -175,7 +191,7 @@ def _apply_global_input(
 
 
 def _room_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Schema for adding or editing a room."""
+    """Build the schema for adding or editing a room."""
     defaults = defaults or {}
     return vol.Schema(
         {

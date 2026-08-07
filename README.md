@@ -43,6 +43,14 @@ texts.
   appear as Home Assistant persistent notifications.
 - **Unlimited rooms**, managed via the UI — add, edit or remove rooms at any
   time; delay timers and dismissals survive restarts and reloads.
+- **Any temperature unit**: sensors are read in whatever unit they report and
+  normalised internally; thresholds, attributes and notification texts all use
+  your Home Assistant unit.
+- **Honest about missing data**: a room whose sensors are unavailable reports
+  as unavailable instead of silently *"no ventilation needed"*, a window
+  contact that stops reporting suppresses the open reminder rather than being
+  taken for a closed window, and configured entities that disappear (renamed
+  or deleted) raise a repair issue.
 
 ## Installation
 
@@ -87,6 +95,9 @@ Requires Home Assistant 2024.11 or newer.
 | Weather entity | optional, enables the hot day hint | – |
 | Hot day threshold | forecast high that counts as a hot day | 25 °C |
 | Notification language | English, German or follow the HA language | auto |
+
+Temperature settings are entered in your Home Assistant unit; the defaults
+above are the metric ones.
 
 ## Development
 

@@ -3,19 +3,31 @@
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.const import (
+    ATTR_DEVICE_CLASS,
+    ATTR_UNIT_OF_MEASUREMENT,
+    STATE_UNAVAILABLE,
+    UnitOfTemperature,
+)
+from homeassistant.core import CoreState, HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
-from homeassistant.core import CoreState, HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.helpers import device_registry as dr, entity_registry as er
-
 from custom_components.ventilation_reminder.const import (
     CONF_DELAY_MINUTES,
     CONF_HOT_DAY_TEMP,
     CONF_HUMIDITY_SENSORS,
+    CONF_INDOOR_MIN_TEMP,
     CONF_INDOOR_SENSORS,
+    CONF_MIN_DIFF,
     CONF_NOTIFY_SERVICES,
     CONF_OUTDOOR_HUMIDITY_SENSORS,
     CONF_OUTDOOR_SENSORS,
@@ -25,9 +37,7 @@ from custom_components.ventilation_reminder.const import (
     CONF_WINDOW_SENSORS,
     DOMAIN,
 )
-from custom_components.ventilation_reminder.coordinator import (
-    VentilationCoordinator,
-)
+from custom_components.ventilation_reminder.coordinator import VentilationCoordinator
 
 CONFIG = {
     CONF_OUTDOOR_SENSORS: ["sensor.outdoor_temperature"],
@@ -49,6 +59,16 @@ async def _setup_entry(hass: HomeAssistant, config: dict) -> MockConfigEntry:
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry
+
+
+def _set_temperature(
+    hass: HomeAssistant, entity_id: str, value: float, unit: str
+) -> None:
+    hass.states.async_set(
+        entity_id,
+        str(value),
+        {ATTR_DEVICE_CLASS: "temperature", ATTR_UNIT_OF_MEASUREMENT: unit},
+    )
 
 
 def _sensor_entity_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
@@ -84,9 +104,7 @@ async def test_setup_creates_room_device_and_cleans_stale_entities(
 
     device_registry = dr.async_get(hass)
     hub = device_registry.async_get_device({(DOMAIN, entry.entry_id)})
-    room = device_registry.async_get_device(
-        {(DOMAIN, f"{entry.entry_id}_living_room")}
-    )
+    room = device_registry.async_get_device({(DOMAIN, f"{entry.entry_id}_living_room")})
     assert hub is not None
     assert room is not None
     assert room.via_device_id == hub.id
@@ -383,3 +401,200 @@ async def test_unchanged_state_is_not_rewritten(
         await hass.async_block_till_done()
 
     assert writes == 0
+
+
+async def test_fahrenheit_sensors_are_converted(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Sensors reporting °F are normalised before they are compared."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    hass.config.units = US_CUSTOMARY_SYSTEM
+
+    # 64.4 °F = 18 °C outside, 77 °F = 25 °C inside: the same situation as
+    # test_open_reminder_lifecycle, only in Fahrenheit.
+    _set_temperature(
+        hass, "sensor.outdoor_temperature", 64.4, UnitOfTemperature.FAHRENHEIT
+    )
+    _set_temperature(
+        hass, "sensor.living_temperature", 77.0, UnitOfTemperature.FAHRENHEIT
+    )
+    hass.states.async_set("sensor.living_humidity", "55.0")
+
+    # Thresholds are entered in the system unit: 73.4 °F = 23 °C, 1.8 °F = 1 K
+    config = {**CONFIG, CONF_INDOOR_MIN_TEMP: 73.4, CONF_MIN_DIFF: 1.8}
+    entry = await _setup_entry(hass, config)
+    entity_id = _sensor_entity_id(hass, entry)
+
+    freezer.tick(timedelta(minutes=2))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    # Attributes and texts come back in the system unit
+    assert state.attributes["indoor_temperature"] == 77.0
+    assert state.attributes["outdoor_temperature"] == 64.4
+    assert entry.runtime_data.data["living_room"].temp_in == 25.0
+
+    notifications = hass.data.get("persistent_notification", {})
+    open_ids = [nid for nid in notifications if nid.startswith("ventilation_open_")]
+    assert "64.4 °F" in notifications[open_ids[0]]["message"]
+    assert "Living room (77.0 °F, 55 %)" in notifications[open_ids[0]]["message"]
+
+
+async def test_celsius_sensor_on_a_fahrenheit_system(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """A sensor's own unit wins over the system unit."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    hass.config.units = US_CUSTOMARY_SYSTEM
+
+    _set_temperature(
+        hass, "sensor.outdoor_temperature", 18.0, UnitOfTemperature.CELSIUS
+    )
+    _set_temperature(hass, "sensor.living_temperature", 25.0, UnitOfTemperature.CELSIUS)
+    hass.states.async_set("sensor.living_humidity", "55.0")
+
+    config = {**CONFIG, CONF_INDOOR_MIN_TEMP: 73.4, CONF_MIN_DIFF: 1.8}
+    entry = await _setup_entry(hass, config)
+
+    freezer.tick(timedelta(minutes=2))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    room = entry.runtime_data.data["living_room"]
+    assert room.temp_in == 25.0
+    assert room.open_recommended
+
+
+async def test_unavailable_window_blocks_the_open_reminder(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """An unavailable contact must not be treated as a closed window."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    hass.states.async_set("sensor.outdoor_temperature", "18.0")
+    hass.states.async_set("sensor.living_temperature", "25.0")
+    hass.states.async_set("sensor.living_humidity", "55.0")
+    hass.states.async_set(
+        "binary_sensor.living_window",
+        STATE_UNAVAILABLE,
+        {ATTR_DEVICE_CLASS: "window", "friendly_name": "Living window"},
+    )
+
+    config = {
+        **CONFIG,
+        CONF_ROOMS: [
+            {
+                **CONFIG[CONF_ROOMS][0],
+                CONF_WINDOW_SENSORS: ["binary_sensor.living_window"],
+            }
+        ],
+    }
+    entry = await _setup_entry(hass, config)
+    entity_id = _sensor_entity_id(hass, entry)
+
+    freezer.tick(timedelta(minutes=2))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
+    assert state.attributes["unavailable_windows"] == ["Living window"]
+
+    # Once the contact reports again, the reminder works as usual
+    hass.states.async_set(
+        "binary_sensor.living_window",
+        "off",
+        {ATTR_DEVICE_CLASS: "window", "friendly_name": "Living window"},
+    )
+    # One cycle starts the delay timer, the next one lets it expire
+    for _ in range(2):
+        freezer.tick(timedelta(minutes=2))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["unavailable_windows"] == []
+
+
+async def test_missing_readings_make_the_sensor_unavailable(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Without usable readings the room state is unknown, not 'off'."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    hass.states.async_set("sensor.outdoor_temperature", "18.0")
+    hass.states.async_set("sensor.living_temperature", "25.0")
+
+    entry = await _setup_entry(hass, CONFIG)
+    entity_id = _sensor_entity_id(hass, entry)
+    assert hass.states.get(entity_id).state == "off"
+
+    hass.states.async_set("sensor.living_temperature", STATE_UNAVAILABLE)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
+
+
+async def test_repair_issue_for_entities_that_disappeared(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """A deleted or renamed sensor is reported instead of silently ignored."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    hass.set_state(CoreState.running)
+    hass.states.async_set("sensor.outdoor_temperature", "18.0")
+    hass.states.async_set("sensor.living_temperature", "25.0")
+    hass.states.async_set("sensor.living_humidity", "55.0")
+
+    entry = await _setup_entry(hass, CONFIG)
+    issue_registry = ir.async_get(hass)
+    issue_id = f"missing_entities_{entry.entry_id}"
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+    hass.states.async_remove("sensor.living_humidity")
+    freezer.tick(timedelta(minutes=2))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    issue = issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_placeholders["entities"] == "sensor.living_humidity"
+    assert entry.runtime_data.missing_entities == ["sensor.living_humidity"]
+
+    # It comes back -> the issue is resolved automatically
+    hass.states.async_set("sensor.living_humidity", "55.0")
+    freezer.tick(timedelta(minutes=2))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_attribute_only_change_does_not_refresh(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Attribute updates carry no new reading, so they must not re-evaluate."""
+    freezer.move_to("2026-07-15 17:00:00+00:00")
+    hass.states.async_set("sensor.outdoor_temperature", "18.0")
+    hass.states.async_set("sensor.living_temperature", "25.0")
+
+    entry = await _setup_entry(hass, CONFIG)
+    coordinator = entry.runtime_data
+
+    refreshes = 0
+    original = coordinator.async_request_refresh
+
+    async def _counting_refresh():
+        nonlocal refreshes
+        refreshes += 1
+        await original()
+
+    coordinator.async_request_refresh = _counting_refresh
+
+    hass.states.async_set("sensor.living_temperature", "25.0", {"battery": 90})
+    await hass.async_block_till_done()
+    assert refreshes == 0
+
+    hass.states.async_set("sensor.living_temperature", "24.0", {"battery": 90})
+    await hass.async_block_till_done()
+    assert refreshes == 1
