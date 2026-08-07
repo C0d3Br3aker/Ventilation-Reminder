@@ -50,8 +50,7 @@ class SnoozeSwitch(
         if (
             last is not None
             and last.state == "on"
-            and last.attributes.get("snoozed_on")
-            == dt_util.now().date().isoformat()
+            and last.attributes.get("snoozed_on") == dt_util.now().date().isoformat()
         ):
             await self.coordinator.async_set_snooze(True)
 

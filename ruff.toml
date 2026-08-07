@@ -1,0 +1,37 @@
+# Mirrors the rules Home Assistant Core applies to integrations.
+target-version = "py313"
+line-length = 88
+
+[lint]
+select = [
+    "ASYNC", # flake8-async
+    "B",     # flake8-bugbear
+    "BLE",   # flake8-blind-except
+    "C4",    # flake8-comprehensions
+    "D",     # pydocstyle
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "I",     # isort
+    "PIE",   # flake8-pie
+    "RUF",   # ruff-specific rules
+    "SIM",   # flake8-simplify
+    "T20",   # flake8-print
+    "UP",    # pyupgrade
+    "W",     # pycodestyle warnings
+]
+ignore = [
+    "D203",   # incompatible with D211
+    "D213",   # incompatible with D212
+    "D102",   # entity property overrides are documented by the base class
+    "D107",   # __init__ is covered by the class docstring
+    "RUF001", # notification texts use typographic dashes on purpose
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["D103"]  # test names document themselves
+
+[lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components", "tests"]
+combine-as-imports = true
+split-on-trailing-comma = false

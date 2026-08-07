@@ -1,8 +1,7 @@
 """Tests for the config and options flows."""
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ventilation_reminder.const import (
     CONF_HUMIDITY_SENSORS,

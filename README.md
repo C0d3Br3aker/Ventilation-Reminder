@@ -105,10 +105,12 @@ above are the metric ones.
 python3.13 -m venv .venv
 .venv/bin/pip install -r requirements_test.txt
 .venv/bin/pytest tests/ -q
+.venv/bin/ruff check .
+.venv/bin/ruff format .
 ```
 
 CI runs [hassfest](https://developers.home-assistant.io/blog/2020/04/16/hassfest),
-HACS validation and the test suite on every push.
+HACS validation, ruff and the test suite on every push.
 
 ## License
 
