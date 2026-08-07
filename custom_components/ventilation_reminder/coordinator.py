@@ -382,10 +382,14 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
                 )
             else:
                 drying_possible = outdoor_cooler
+            # Even when the outside air is drier, ventilating must not heat
+            # the room up: on a hot day the humidity reminder would otherwise
+            # trade a few percent of humidity for several degrees.
             humidity_condition = (
                 state.humidity is not None
                 and state.humidity >= humidity_max
                 and drying_possible
+                and outdoor_cooler
             )
             open_condition = not state.open_window_names and (
                 temp_condition or humidity_condition

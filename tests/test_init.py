@@ -225,6 +225,32 @@ async def test_dew_point_comparison_with_outdoor_humidity(
     assert abs(state.attributes["outdoor_dew_point"] - 7.41) < 0.1
 
 
+async def test_no_humidity_reminder_when_hotter_outside(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Drier but much hotter air outside must not trigger a reminder."""
+    freezer.move_to("2026-07-15 15:00:00+00:00")
+    # Inside 24.5 °C / 69 % -> dew point ~18.3 °C.
+    # Outside 33 °C / 30 % -> dew point ~13.0 °C: drier, but far too hot.
+    hass.states.async_set("sensor.outdoor_temperature", "33.0")
+    hass.states.async_set("sensor.outdoor_humidity", "30.0")
+    hass.states.async_set("sensor.living_temperature", "24.5")
+    hass.states.async_set("sensor.living_humidity", "69.0")
+
+    config = {**CONFIG, CONF_OUTDOOR_HUMIDITY_SENSORS: ["sensor.outdoor_humidity"]}
+    entry = await _setup_entry(hass, config)
+    entity_id = _sensor_entity_id(hass, entry)
+
+    for _ in range(2):
+        freezer.tick(timedelta(minutes=2))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
+    assert state.attributes["outdoor_dew_point"] < state.attributes["indoor_dew_point"]
+
+
 def _stored(entry: MockConfigEntry, data: dict) -> dict:
     return {
         "version": 1,
