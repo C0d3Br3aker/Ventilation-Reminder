@@ -10,6 +10,7 @@
           "notify_services": "Notify services (e.g. mobile_app_...)",
           "min_diff": "Minimum temperature difference",
           "indoor_min_temp": "Indoor threshold temperature",
+          "frost_min_temp": "Frost protection temperature",
           "humidity_threshold": "Humidity threshold",
           "delay_minutes": "Delay (minutes)",
           "time_start": "Do not disturb before",
@@ -26,7 +27,8 @@
           "humidity_threshold": "Rooms with humidity sensors are also flagged when humidity reaches this value and the air outside is drier.",
           "delay_minutes": "The condition must hold continuously for this long before notifying.",
           "weather_entity": "If set, reminders mention when a hot day is expected.",
-          "hot_day_temp": "Forecast high at or above this value counts as a hot day."
+          "hot_day_temp": "Forecast high at or above this value counts as a hot day.",
+          "frost_min_temp": "Never remind while the room is colder than this, so that airing out a damp room does not chill it down."
         }
       },
       "add_room": {
@@ -73,6 +75,7 @@
           "notify_services": "Notify services (e.g. mobile_app_...)",
           "min_diff": "Minimum temperature difference",
           "indoor_min_temp": "Indoor threshold temperature",
+          "frost_min_temp": "Frost protection temperature",
           "humidity_threshold": "Humidity threshold",
           "delay_minutes": "Delay (minutes)",
           "time_start": "Do not disturb before",
@@ -86,7 +89,8 @@
           "outdoor_humidity_sensors": "If set, humidity reminders compare dew points instead of just requiring it to be cooler outside.",
           "humidity_threshold": "Rooms with humidity sensors are also flagged when humidity reaches this value and the air outside is drier.",
           "weather_entity": "If set, reminders mention when a hot day is expected.",
-          "hot_day_temp": "Forecast high at or above this value counts as a hot day."
+          "hot_day_temp": "Forecast high at or above this value counts as a hot day.",
+          "frost_min_temp": "Never remind while the room is colder than this, so that airing out a damp room does not chill it down."
         }
       },
       "add_room": {

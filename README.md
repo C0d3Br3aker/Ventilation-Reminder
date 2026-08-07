@@ -22,9 +22,19 @@ texts.
   outdoor humidity sensors configured this uses a real **dew point
   comparison** (Magnus formula, outdoor dew point at least 1 K below the
   room's); without them, "cooler outside" is used as an approximation.
-- **Close reminder**: If windows are open and it gets warmer outside than
-  inside again, one aggregated reminder lists the rooms and their open
-  windows.
+- **Ventilation duration**: Every reminder says roughly how long each room
+  needs — estimated from the temperature difference, between 5 minutes at
+  20 K and 20 minutes at 5 K. When that is a short burst, the reminder asks
+  you to *air out briefly* instead of to open the windows, which is what you
+  want in January.
+- **Close reminder**: Windows are flagged once it gets warmer outside than
+  inside again **or** once they have been open for the recommended duration —
+  burst ventilating never gets warmer outside, so without the timer the
+  window would stay open until someone remembers it. One aggregated reminder
+  lists the rooms and their open windows.
+- **Frost protection**: Below the configurable frost threshold no room is
+  flagged at all, so drying out a damp room is never paid for with a cold
+  one.
 - **Hot day hint**: With a weather entity configured, the open reminder
   mentions when a hot day is expected — a nudge to air out early.
 - **Action buttons**: **Done** dismisses the notification on all devices and
@@ -34,8 +44,8 @@ texts.
   resets at midnight, survives restarts.
 - **One device per room** with a `binary_sensor` (localized names) exposing
   indoor temperature/humidity, indoor and outdoor dew point, outdoor
-  temperature/humidity, forecast high, open windows and the close
-  recommendation as attributes.
+  temperature/humidity, forecast high, open windows, the recommended
+  ventilation duration and the close recommendation as attributes.
 - **Quiet hours** and **notification language** (English/German/follow HA
   language) are configurable. Reminders that lapse during quiet hours are
   still cleared from your devices.
@@ -89,6 +99,7 @@ Requires Home Assistant 2024.11 or newer.
 | Notify services | mobile devices via the HA companion app; empty = persistent notifications | – |
 | Minimum temperature difference | how much cooler it must be outside (hysteresis) | 1 °C |
 | Indoor threshold temperature | only remind above this room temperature (prevents winter spam) | 23 °C |
+| Frost protection temperature | never remind below this room temperature, humidity included | 15 °C |
 | Humidity threshold | flag rooms with humidity sensors at or above this value | 65 % |
 | Delay | condition must hold continuously for this long | 10 min |
 | Do not disturb before / after | time window for notifications | 07:00–22:30 |

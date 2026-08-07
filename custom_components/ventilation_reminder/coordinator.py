@@ -19,7 +19,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util, slugify
 
 from .const import (
+    BURST_DELAY_MINUTES,
+    BURST_MAX_MINUTES,
     CONF_DELAY_MINUTES,
+    CONF_FROST_MIN_TEMP,
     CONF_HOT_DAY_TEMP,
     CONF_HUMIDITY_SENSORS,
     CONF_HUMIDITY_THRESHOLD,
@@ -37,6 +40,7 @@ from .const import (
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DEFAULT_DELAY_MINUTES,
+    DEFAULT_FROST_MIN_TEMP,
     DEFAULT_HOT_DAY_TEMP,
     DEFAULT_HUMIDITY_THRESHOLD,
     DEFAULT_INDOOR_MIN_TEMP,
@@ -47,6 +51,8 @@ from .const import (
     DOMAIN,
     LANG_AUTO,
     LANG_DE,
+    MAX_VENTILATION_MINUTES,
+    MIN_VENTILATION_MINUTES,
     STORAGE_VERSION,
     UPDATE_INTERVAL_SECONDS,
 )
@@ -74,6 +80,12 @@ class RoomState:
     unknown_window_names: list[str] = field(default_factory=list)
     open_recommended: bool = False
     close_recommended: bool = False
+    # Minutes of ventilating this room currently needs, and whether that is
+    # short enough to be a burst rather than an open window
+    ventilation_minutes: int | None = None
+    burst: bool = False
+    opened_at: datetime | None = None
+    close_reason: str | None = None
 
 
 def _fmt(value: float | None) -> str:
@@ -96,6 +108,20 @@ class VentilationStore(Store[dict[str, Any]]):
     ) -> dict[str, Any]:
         """Migrate stored state to the current schema."""
         return old_data
+
+
+def _recommended_minutes(
+    temp_in: float | None, outdoor_temp: float | None
+) -> int | None:
+    """How long ventilating this room should take, from the temperature drop.
+
+    A rough rule of thumb, not physics: the bigger the difference, the faster
+    the air is exchanged. Without both readings no duration can be given.
+    """
+    if temp_in is None or outdoor_temp is None:
+        return None
+    minutes = round(MAX_VENTILATION_MINUTES + 5 - (temp_in - outdoor_temp))
+    return min(MAX_VENTILATION_MINUTES, max(MIN_VENTILATION_MINUTES, minutes))
 
 
 def _dew_point(temp: float | None, rel_humidity: float | None) -> float | None:
@@ -129,6 +155,11 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
 
         self._open_since: dict[str, datetime] = {}
         self._close_since: dict[str, datetime] = {}
+        # When each room's first window was opened, and the duration that was
+        # recommended at that moment - the estimate must not drift while the
+        # room cools down, or the close reminder would never be due.
+        self._opened_at: dict[str, datetime] = {}
+        self._open_minutes: dict[str, int] = {}
         # Rooms dismissed via the "Done" button, until their condition resets
         self._acked_open: set[str] = set()
         self._acked_close: set[str] = set()
@@ -212,6 +243,10 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
             "close_since": {
                 slug: when.isoformat() for slug, when in self._close_since.items()
             },
+            "opened_at": {
+                slug: when.isoformat() for slug, when in self._opened_at.items()
+            },
+            "open_minutes": dict(self._open_minutes),
             "acked_open": sorted(self._acked_open),
             "acked_close": sorted(self._acked_close),
             "notified_open": sorted(self._notified_open),
@@ -248,6 +283,15 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
 
         self._open_since = _parse_times(stored.get("open_since", {}))
         self._close_since = _parse_times(stored.get("close_since", {}))
+        # Unlike the timers above, _opened_at survives a restart: it records an
+        # event - the window was opened then - not a condition that has to have
+        # held since. The price is a close reminder that comes early for a
+        # window that was closed and reopened while Home Assistant was down.
+        self._opened_at = _parse_times(stored.get("opened_at", {}))
+        self._open_minutes = {
+            slug: int(minutes)
+            for slug, minutes in stored.get("open_minutes", {}).items()
+        }
         self._acked_open = set(stored.get("acked_open", []))
         self._acked_close = set(stored.get("acked_close", []))
         self._notified_open = set(stored.get("notified_open", []))
@@ -400,6 +444,7 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
         )
         min_diff = self._config_temp_delta(CONF_MIN_DIFF, DEFAULT_MIN_DIFF)
         indoor_min = self._config_temp(CONF_INDOOR_MIN_TEMP, DEFAULT_INDOOR_MIN_TEMP)
+        frost_min = self._config_temp(CONF_FROST_MIN_TEMP, DEFAULT_FROST_MIN_TEMP)
         humidity_max = float(
             self.config.get(CONF_HUMIDITY_THRESHOLD, DEFAULT_HUMIDITY_THRESHOLD)
         )
@@ -446,6 +491,20 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
                 elif window.state == STATE_ON:
                     state.open_window_names.append(name)
 
+            state.ventilation_minutes = _recommended_minutes(
+                state.temp_in, self.outdoor_temp
+            )
+            state.burst = (
+                state.ventilation_minutes is not None
+                and state.ventilation_minutes <= BURST_MAX_MINUTES
+            )
+            # A burst is over before the standard delay has even elapsed.
+            room_delay = (
+                min(delay, timedelta(minutes=BURST_DELAY_MINUTES))
+                if state.burst
+                else delay
+            )
+
             outdoor_cooler = (
                 self.outdoor_temp is not None
                 and state.temp_in is not None
@@ -475,14 +534,31 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
                 and drying_possible
                 and outdoor_cooler
             )
+            # Below the frost threshold the room is too cold to ventilate at
+            # all - drying it further would be paid for with a cold room.
+            warm_enough = state.temp_in is not None and state.temp_in >= frost_min
             open_condition = (
                 not state.open_window_names
                 and not state.unknown_window_names
+                and warm_enough
                 and (temp_condition or humidity_condition)
             )
-            close_condition = (
-                bool(window_entities)
-                and bool(state.open_window_names)
+
+            # A window is only aired for as long as was recommended when it was
+            # opened; classic burst ventilating never gets warmer outside, so
+            # without this the close reminder would simply never arrive.
+            if state.open_window_names:
+                state.opened_at = self._opened_at.setdefault(slug, now)
+                minutes = self._open_minutes.setdefault(
+                    slug, state.ventilation_minutes or MAX_VENTILATION_MINUTES
+                )
+                aired_out = now - state.opened_at >= timedelta(minutes=minutes)
+            else:
+                self._opened_at.pop(slug, None)
+                self._open_minutes.pop(slug, None)
+                aired_out = False
+            warmer_outside = (
+                bool(state.open_window_names)
                 and self.outdoor_temp is not None
                 and state.temp_in is not None
                 and self.outdoor_temp > state.temp_in
@@ -491,15 +567,22 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
             # The condition must hold continuously for the configured delay
             if open_condition:
                 self._open_since.setdefault(slug, now)
-                state.open_recommended = now - self._open_since[slug] >= delay
+                state.open_recommended = now - self._open_since[slug] >= room_delay
             else:
                 self._open_since.pop(slug, None)
                 self._acked_open.discard(slug)
-            if close_condition:
+            if warmer_outside:
                 self._close_since.setdefault(slug, now)
-                state.close_recommended = now - self._close_since[slug] >= delay
+                warmed_up = now - self._close_since[slug] >= room_delay
             else:
                 self._close_since.pop(slug, None)
+                warmed_up = False
+            if warmed_up or aired_out:
+                state.close_recommended = True
+                # Aired out long enough is the more specific reason, so it wins
+                # when both apply.
+                state.close_reason = "aired" if aired_out else "warmer"
+            elif not warmer_outside:
                 self._acked_close.discard(slug)
 
             data[slug] = state
@@ -573,10 +656,15 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
         """Format an internal °C value in the unit the user has configured."""
         return f"{_fmt(self.to_display(celsius))} {self.display_unit}"
 
-    def _room_text(self, room: RoomState) -> str:
+    def _room_text(self, room: RoomState, lang: str) -> str:
         details = self._fmt_temp(room.temp_in)
         if room.humidity is not None:
             details += f", {room.humidity:.0f} %"
+        if room.ventilation_minutes is not None:
+            minutes = room.ventilation_minutes
+            details += (
+                f", ca. {minutes} Min." if lang == LANG_DE else f", ~{minutes} min"
+            )
         return f"{room.name} ({details})"
 
     def _hot_day_hint(self, lang: str) -> str:
@@ -592,6 +680,24 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
             f" Up to {self._fmt_temp(self.forecast_high)} expected today –"
             " a good moment to air out."
         )
+
+    @staticmethod
+    def _close_lead_de(reasons: set[str | None], out_txt: str) -> str:
+        """Build the opening sentence of the close reminder from its reasons."""
+        if reasons == {"warmer"}:
+            return f"Draußen ist es mit {out_txt} wärmer als drinnen."
+        if reasons == {"aired"}:
+            return "Es ist lange genug gelüftet."
+        return "Zeit, die Fenster wieder zu schließen."
+
+    @staticmethod
+    def _close_lead_en(reasons: set[str | None], out_txt: str) -> str:
+        """Build the opening sentence of the close reminder from its reasons."""
+        if reasons == {"warmer"}:
+            return f"It is warmer outside ({out_txt}) than inside."
+        if reasons == {"aired"}:
+            return "That is enough fresh air."
+        return "Time to close the windows again."
 
     async def _async_handle_notifications(self, data: dict[str, RoomState]) -> None:
         open_set = {
@@ -624,18 +730,20 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
                 await self._async_clear(self._open_tag)
             else:
                 rooms_txt = ", ".join(
-                    self._room_text(data[slug]) for slug in sorted(open_set)
+                    self._room_text(data[slug], lang) for slug in sorted(open_set)
                 )
+                # A few minutes with the window wide open is a different
+                # instruction than "open the windows" - saying the latter in
+                # January leaves the flat cold half an hour later.
+                burst = all(data[slug].burst for slug in open_set)
                 if lang == LANG_DE:
                     title = "🪟 Jetzt lüften!"
-                    message = (
-                        f"Draußen sind es {out_txt}. Fenster öffnen in: {rooms_txt}."
-                    )
+                    action = "Kurz stoßlüften in" if burst else "Fenster öffnen in"
+                    message = f"Draußen sind es {out_txt}. {action}: {rooms_txt}."
                 else:
                     title = "🪟 Time to ventilate!"
-                    message = (
-                        f"It is {out_txt} outside. Open the windows in: {rooms_txt}."
-                    )
+                    action = "Air out briefly in" if burst else "Open the windows in"
+                    message = f"It is {out_txt} outside. {action}: {rooms_txt}."
                 message += self._hot_day_hint(lang)
                 await self._async_send(title, message, self._open_tag, lang)
             self._notified_open = open_set
@@ -648,18 +756,15 @@ class VentilationCoordinator(DataUpdateCoordinator[dict[str, RoomState]]):
                     f"{data[slug].name} ({', '.join(data[slug].open_window_names)})"
                     for slug in sorted(close_set)
                 )
+                reasons = {data[slug].close_reason for slug in close_set}
                 if lang == LANG_DE:
                     title = "🪟 Fenster schließen!"
-                    message = (
-                        f"Draußen ist es mit {out_txt} wärmer als drinnen. "
-                        f"Noch offen: {rooms_txt}."
-                    )
+                    lead = self._close_lead_de(reasons, out_txt)
+                    message = f"{lead} Noch offen: {rooms_txt}."
                 else:
                     title = "🪟 Close the windows!"
-                    message = (
-                        f"It is warmer outside ({out_txt}) than inside. "
-                        f"Still open: {rooms_txt}."
-                    )
+                    lead = self._close_lead_en(reasons, out_txt)
+                    message = f"{lead} Still open: {rooms_txt}."
                 await self._async_send(title, message, self._close_tag, lang)
             self._notified_close = close_set
 

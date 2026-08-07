@@ -17,6 +17,7 @@ import voluptuous as vol
 
 from .const import (
     CONF_DELAY_MINUTES,
+    CONF_FROST_MIN_TEMP,
     CONF_HOT_DAY_TEMP,
     CONF_HUMIDITY_SENSORS,
     CONF_HUMIDITY_THRESHOLD,
@@ -34,6 +35,7 @@ from .const import (
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DEFAULT_DELAY_MINUTES,
+    DEFAULT_FROST_MIN_TEMP,
     DEFAULT_HOT_DAY_TEMP,
     DEFAULT_HUMIDITY_THRESHOLD,
     DEFAULT_INDOOR_MIN_TEMP,
@@ -112,6 +114,20 @@ def _global_schema(hass: HomeAssistant, defaults: dict[str, Any]) -> vol.Schema:
                 selector.NumberSelectorConfig(
                     min=_temp(hass, 15),
                     max=_temp(hass, 30),
+                    step=0.5,
+                    unit_of_measurement=temp_unit,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Required(
+                CONF_FROST_MIN_TEMP,
+                default=defaults.get(
+                    CONF_FROST_MIN_TEMP, _temp(hass, DEFAULT_FROST_MIN_TEMP)
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=_temp(hass, 5),
+                    max=_temp(hass, 20),
                     step=0.5,
                     unit_of_measurement=temp_unit,
                     mode=selector.NumberSelectorMode.BOX,

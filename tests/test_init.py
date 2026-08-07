@@ -23,6 +23,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.ventilation_reminder.const import (
     CONF_DELAY_MINUTES,
+    CONF_FROST_MIN_TEMP,
     CONF_HOT_DAY_TEMP,
     CONF_HUMIDITY_SENSORS,
     CONF_INDOOR_MIN_TEMP,
@@ -137,7 +138,9 @@ async def test_open_reminder_lifecycle(
     notifications = hass.data.get("persistent_notification", {})
     open_ids = [nid for nid in notifications if nid.startswith("ventilation_open_")]
     assert len(open_ids) == 1
-    assert "Living room (25.0 °C, 55 %)" in notifications[open_ids[0]]["message"]
+    assert (
+        "Living room (25.0 °C, 55 %, ~18 min)" in notifications[open_ids[0]]["message"]
+    )
 
     # Outside warms up -> recommendation and notification go away
     hass.states.async_set("sensor.outdoor_temperature", "26.0")
@@ -267,6 +270,127 @@ async def test_no_humidity_reminder_when_hotter_outside(
     state = hass.states.get(entity_id)
     assert state.state == "off"
     assert state.attributes["outdoor_dew_point"] < state.attributes["indoor_dew_point"]
+
+
+async def test_frost_threshold_blocks_the_humidity_reminder(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """A room this cold must not be aired out for the sake of its humidity."""
+    freezer.move_to("2026-01-15 18:00:00+00:00")  # 10:00 local, inside window
+    hass.states.async_set("sensor.outdoor_temperature", "2.0")
+    hass.states.async_set("sensor.living_temperature", "14.0")
+    hass.states.async_set("sensor.living_humidity", "72.0")
+
+    entry = await _setup_entry(hass, {**CONFIG, CONF_FROST_MIN_TEMP: 15.0})
+    entity_id = _sensor_entity_id(hass, entry)
+
+    freezer.tick(timedelta(minutes=2))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == "off"
+
+    # Warm enough again -> the humidity path works as usual
+    hass.states.async_set("sensor.living_temperature", "16.0")
+    for _ in range(2):
+        freezer.tick(timedelta(minutes=2))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == "on"
+
+
+async def test_cold_outside_asks_for_a_short_burst(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """In winter the reminder asks for a burst, not for an open window."""
+    freezer.move_to("2026-01-15 18:00:00+00:00")  # 10:00 local, inside window
+    # 20 °C inside, 2 °C outside -> 18 K difference -> 7 minutes
+    hass.states.async_set("sensor.outdoor_temperature", "2.0")
+    hass.states.async_set("sensor.living_temperature", "20.0")
+    hass.states.async_set("sensor.living_humidity", "72.0")
+
+    # A ten minute delay would outlast the burst it announces
+    config = {**CONFIG, CONF_DELAY_MINUTES: 10}
+    entry = await _setup_entry(hass, config)
+    entity_id = _sensor_entity_id(hass, entry)
+
+    freezer.tick(timedelta(minutes=4))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["ventilation_minutes"] == 7
+
+    notifications = hass.data.get("persistent_notification", {})
+    open_ids = [nid for nid in notifications if nid.startswith("ventilation_open_")]
+    message = notifications[open_ids[0]]["message"]
+    assert "Air out briefly in" in message
+    assert "Living room (20.0 °C, 72 %, ~7 min)" in message
+
+
+async def test_close_reminder_after_the_recommended_duration(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Burst ventilating never gets warmer outside, so time has to end it."""
+    freezer.move_to("2026-01-15 18:00:00+00:00")  # 10:00 local, inside window
+    hass.states.async_set("sensor.outdoor_temperature", "2.0")
+    hass.states.async_set("sensor.living_temperature", "20.0")
+    hass.states.async_set("sensor.living_humidity", "72.0")
+    hass.states.async_set(
+        "binary_sensor.living_window",
+        "on",
+        {ATTR_DEVICE_CLASS: "window", "friendly_name": "Living window"},
+    )
+
+    config = {
+        **CONFIG,
+        CONF_ROOMS: [
+            {
+                **CONFIG[CONF_ROOMS][0],
+                CONF_WINDOW_SENSORS: ["binary_sensor.living_window"],
+            }
+        ],
+    }
+    entry = await _setup_entry(hass, config)
+    room = entry.runtime_data.data["living_room"]
+    assert room.opened_at is not None
+    assert not room.close_recommended
+
+    # Still inside the recommended seven minutes
+    freezer.tick(timedelta(minutes=5))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert not entry.runtime_data.data["living_room"].close_recommended
+
+    freezer.tick(timedelta(minutes=3))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    room = entry.runtime_data.data["living_room"]
+    assert room.close_recommended
+    assert room.close_reason == "aired"
+
+    notifications = hass.data.get("persistent_notification", {})
+    close_ids = [nid for nid in notifications if nid.startswith("ventilation_close_")]
+    assert len(close_ids) == 1
+    message = notifications[close_ids[0]]["message"]
+    assert "That is enough fresh air." in message
+    assert "Living room (Living window)" in message
+
+    # Closing the window ends it and forgets the timer
+    hass.states.async_set(
+        "binary_sensor.living_window",
+        "off",
+        {ATTR_DEVICE_CLASS: "window", "friendly_name": "Living window"},
+    )
+    freezer.tick(timedelta(minutes=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert not entry.runtime_data.data["living_room"].close_recommended
+    assert entry.runtime_data._opened_at == {}
 
 
 def _stored(entry: MockConfigEntry, data: dict) -> dict:
@@ -439,7 +563,9 @@ async def test_fahrenheit_sensors_are_converted(
     notifications = hass.data.get("persistent_notification", {})
     open_ids = [nid for nid in notifications if nid.startswith("ventilation_open_")]
     assert "64.4 °F" in notifications[open_ids[0]]["message"]
-    assert "Living room (77.0 °F, 55 %)" in notifications[open_ids[0]]["message"]
+    assert (
+        "Living room (77.0 °F, 55 %, ~18 min)" in notifications[open_ids[0]]["message"]
+    )
 
 
 async def test_celsius_sensor_on_a_fahrenheit_system(

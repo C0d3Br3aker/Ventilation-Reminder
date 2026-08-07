@@ -10,6 +10,7 @@
           "notify_services": "Erinnerungsdienste (z. B. mobile_app_...)",
           "min_diff": "Mindest-Temperaturdifferenz",
           "indoor_min_temp": "Innen-Mindesttemperatur",
+          "frost_min_temp": "Frostschutz-Temperatur",
           "humidity_threshold": "Luftfeuchte-Schwellwert",
           "delay_minutes": "Verzögerung (Minuten)",
           "time_start": "Nicht stören vor",
@@ -26,7 +27,8 @@
           "humidity_threshold": "Räume mit Feuchtesensoren werden auch gemeldet, wenn die Luftfeuchte diesen Wert erreicht und die Luft draußen trockener ist.",
           "delay_minutes": "Die Bedingung muss so lange durchgehend erfüllt sein, bevor benachrichtigt wird.",
           "weather_entity": "Wenn gesetzt, weisen Erinnerungen auf einen erwarteten heißen Tag hin.",
-          "hot_day_temp": "Ab dieser vorhergesagten Höchsttemperatur gilt der Tag als heiß."
+          "hot_day_temp": "Ab dieser vorhergesagten Höchsttemperatur gilt der Tag als heiß.",
+          "frost_min_temp": "Keine Erinnerung, solange der Raum kälter ist – damit das Lüften eines feuchten Raums ihn nicht auskühlt."
         }
       },
       "add_room": {
@@ -73,6 +75,7 @@
           "notify_services": "Erinnerungsdienste (z. B. mobile_app_...)",
           "min_diff": "Mindest-Temperaturdifferenz",
           "indoor_min_temp": "Innen-Mindesttemperatur",
+          "frost_min_temp": "Frostschutz-Temperatur",
           "humidity_threshold": "Luftfeuchte-Schwellwert",
           "delay_minutes": "Verzögerung (Minuten)",
           "time_start": "Nicht stören vor",
@@ -86,7 +89,8 @@
           "outdoor_humidity_sensors": "Wenn gesetzt, vergleichen Feuchte-Erinnerungen die Taupunkte, statt nur kühlere Außenluft zu verlangen.",
           "humidity_threshold": "Räume mit Feuchtesensoren werden auch gemeldet, wenn die Luftfeuchte diesen Wert erreicht und die Luft draußen trockener ist.",
           "weather_entity": "Wenn gesetzt, weisen Erinnerungen auf einen erwarteten heißen Tag hin.",
-          "hot_day_temp": "Ab dieser vorhergesagten Höchsttemperatur gilt der Tag als heiß."
+          "hot_day_temp": "Ab dieser vorhergesagten Höchsttemperatur gilt der Tag als heiß.",
+          "frost_min_temp": "Keine Erinnerung, solange der Raum kälter ist – damit das Lüften eines feuchten Raums ihn nicht auskühlt."
         }
       },
       "add_room": {

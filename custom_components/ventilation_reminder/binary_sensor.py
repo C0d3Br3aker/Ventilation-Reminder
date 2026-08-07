@@ -78,7 +78,10 @@ class VentilationRecommendedSensor(
             "outdoor_humidity": self.coordinator.outdoor_humidity,
             "outdoor_dew_point": to_display(self.coordinator.outdoor_dew_point),
             "forecast_high": to_display(self.coordinator.forecast_high),
+            "ventilation_minutes": room.ventilation_minutes,
+            "windows_opened_at": room.opened_at,
             "close_recommended": room.close_recommended,
+            "close_reason": room.close_reason,
             "open_windows": room.open_window_names,
             "unavailable_windows": room.unknown_window_names,
         }
