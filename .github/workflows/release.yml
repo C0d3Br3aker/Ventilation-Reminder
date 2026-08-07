@@ -1,18 +1,19 @@
 name: Release
 
-# Publishing a release in the GitHub UI is the only manual step. The version
-# in manifest.json is written from the tag here, so the file in the repository
-# is a placeholder and never has to be bumped by hand.
+# Pushing a v* tag is the entire release process: a tag on its own is only a
+# git ref, so this workflow is what turns it into the GitHub release HACS
+# reads. The version in manifest.json is written from the tag here, so the
+# file in the repository is a placeholder and never has to be bumped by hand.
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: Attach the HACS archive
+    name: Publish the HACS archive
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -31,7 +32,11 @@ jobs:
           cd custom_components/ventilation_reminder
           zip -r ../../ventilation_reminder.zip . -x '__pycache__/*' '*.pyc'
 
-      - name: Attach it to the release
+      # --generate-notes lets GitHub write the changelog from the commits
+      # since the previous release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" ventilation_reminder.zip --clobber
+        run: |
+          gh release create "$GITHUB_REF_NAME" ventilation_reminder.zip \
+            --title "$GITHUB_REF_NAME" --generate-notes
